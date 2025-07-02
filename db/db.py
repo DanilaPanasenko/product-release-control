@@ -13,9 +13,11 @@ DATABASE_URL = (
     f"@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DB')}"
 )
 
-engine = create_async_engine(DATABASE_URL, )
+engine = create_async_engine(
+    DATABASE_URL,
+)
 AsyncSessionLocal = async_sessionmaker(
- engine, class_=AsyncSession, expire_on_commit=False
+    engine, class_=AsyncSession, expire_on_commit=False
 )
 
 Base = declarative_base()

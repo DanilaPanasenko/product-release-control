@@ -1,8 +1,17 @@
+from datetime import datetime
+from typing import Optional, Type
+from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.product_control import BatchModel, ProductModel
-from sсhemas.product_control import BatchCreate, Batch, ProductCreate, ProductResponse
+from sсhemas.product_control import (
+    BatchCreate,
+    Batch,
+    ProductCreate,
+    BatchAndProduct,
+    BatchUpdate,
+)
 
 
 class BatchCrud:
@@ -18,8 +27,8 @@ class BatchCrud:
             # Используем асинхронный подход (SQLAlchemy 2.0)
             result = await self.session.execute(
                 select(BatchModel).where(
-                    (BatchModel.batch_number == batch_data.batch_number) &
-                    (BatchModel.batch_date == batch_data.batch_date)
+                    (BatchModel.batch_number == batch_data.batch_number)
+                    & (BatchModel.batch_date == batch_data.batch_date)
                 )
             )
 
@@ -28,7 +37,7 @@ class BatchCrud:
             if existing_batch:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Партия с номером {batch_data.batch_number} и датйо{batch_data.batch_date} уже существует"
+                    detail=f"Партия с номером {batch_data.batch_number} и датйо{batch_data.batch_date} уже существует",
                 )
 
             new_batch = BatchModel(**batch_data.model_dump())
@@ -41,6 +50,48 @@ class BatchCrud:
             await self.session.rollback()
             raise HTTPException(status_code=500, detail=str(e))
 
+    async def get_batch(self, batch_id: int) -> Optional[BatchAndProduct]:
+        """Получаем сменное задание вместе со списком уникальных кодов продукции"""
+
+        result = await self.session.execute(
+            select(BatchModel)
+            .where(BatchModel.id == batch_id)
+            .options(selectinload(BatchModel.products))
+        )
+        batch = result.scalar_one_or_none()
+        return BatchAndProduct.model_validate(batch)
+
+    async def update_batch(
+        self, batch_id: int, update_data: BatchUpdate
+    ) -> Type[BatchModel] | None:
+        """Обновляем задание и при закрытии сменного задания ставим дату закрытия в поле closed_at"""
+        # Получаем только установленные поля
+        update_values = update_data.model_dump(exclude_unset=True)
+
+        # Обрабатываем is_closed отдельно
+        if "is_closed" in update_values:
+            is_closed_data = update_values.pop("is_closed")
+            if isinstance(is_closed_data, dict):  # Если пришло из валидатора
+                update_values.update(is_closed_data)
+            else:
+                update_values["closed_at"] = datetime.now() if is_closed_data else None
+
+        if not update_values:  # Нет полей для обновления
+            return await self.session.get(BatchModel, batch_id)
+
+        # Выполняем обновление
+        result = await self.session.execute(
+            update(BatchModel)
+            .where(BatchModel.id == batch_id)
+            .values(**update_values)
+            .returning(BatchModel)
+        )
+
+        batch = result.scalar_one_or_none()
+        if batch:
+            await self.session.commit()
+        return batch
+
 
 class ProductCrud:
     """Класс для круд операций с продуктом"""
@@ -51,13 +102,9 @@ class ProductCrud:
     async def create_product(self, product_data: ProductCreate):
         """Операция добавления продукта к партиям"""
 
-        result = {
-            "added": 0,
-            "skipped_existing": 0,
-            "skipped_invalid_batch": 0
-        }
+        result = {"added": 0, "skipped_existing": 0, "skipped_invalid_batch": 0}
         for product_item in product_data.products:
-            #Проверка существаования продукта
+            # Проверка существаования продукта
             existing_product = await self.session.execute(
                 select(ProductModel).where(
                     ProductModel.unique_code == product_item.unique_code
@@ -66,11 +113,11 @@ class ProductCrud:
             if existing_product.scalar_one_or_none():
                 result["skipped_existing"] += 1
 
-            #Ищем партию
+            # Ищем партию
             batch = await self.session.execute(
                 select(BatchModel).where(
-                    (BatchModel.batch_date == product_item.batch_date) &
-                    (BatchModel.batch_number == product_item.batch_number)
+                    (BatchModel.batch_date == product_item.batch_date)
+                    & (BatchModel.batch_number == product_item.batch_number)
                 )
             )
             batch = batch.scalar_one_or_none()
@@ -78,12 +125,12 @@ class ProductCrud:
                 result["skipped_invalid_batch"] += 1
                 continue
 
-            #Создаем продукт
+            # Создаем продукт
             new_product = ProductModel(
                 unique_code=product_item.unique_code,
                 batch_id=batch.id,
                 is_aggregated=False,
-                aggregated_at=None
+                aggregated_at=None,
             )
             self.session.add(new_product)
             result["added"] += 1
