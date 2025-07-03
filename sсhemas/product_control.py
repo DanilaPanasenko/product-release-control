@@ -132,3 +132,8 @@ class BatchFilter(BaseModel):
 
     class Config:
         extra = "forbid"
+
+
+class BatchAggregation(BaseModel):
+    batch_id: int
+    unique_code: str

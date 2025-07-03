@@ -6,6 +6,8 @@ from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 from sqlalchemy import select, update, and_
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette import status
+
 from models.product_control import BatchModel, ProductModel
 from sсhemas.product_control import (
     BatchCreate,
@@ -170,3 +172,50 @@ class ProductCrud:
             result["added"] += 1
         await self.session.commit()
         return result
+
+    async def aggregation(self, batch_id: int, unique_code: str):
+        """Агрегация продукта"""
+
+        result = await self.session.execute(
+            select(ProductModel)
+            .where(ProductModel.unique_code == unique_code)
+        )
+        product = result.scalar_one_or_none()
+
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Product not found"
+            )
+
+        # Проверяем привязку к партии
+        if product.batch_id != batch_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unique code is attached to another batch"
+            )
+
+        # Проверяем, не был ли уже агрегирован
+        if product.is_aggregated:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unique code already used at {product.aggregated_at}"
+            )
+
+        # Обновляем запись
+        product.is_aggregated = True
+        product.aggregated_at = datetime.now()
+
+        try:
+            await self.session.commit()
+            return {
+                "unique_code": product.unique_code,
+                "batch_id": product.batch_id,
+                "aggregated_at": product.aggregated_at
+            }
+        except Exception as e:
+            await self.session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=str(e)
+            )

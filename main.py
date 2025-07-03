@@ -14,7 +14,7 @@ from sсhemas.product_control import (
     ProductCreate,
     ProductResponse,
     BatchAndProduct,
-    BatchUpdate, BatchFilter,
+    BatchUpdate, BatchFilter, BatchAggregation,
 )
 
 app = FastAPI()
@@ -108,3 +108,13 @@ async def get_batches(
 
     batch_filters = await crud.get_batches_filter(filters)
     return batch_filters
+
+
+@app.post("/aggregate_product/", status_code=status.HTTP_200_OK)
+async def aggregate_product(
+    request: BatchAggregation,
+    crud: ProductCrud = Depends(get_product_creator)
+):
+    """Агрегирует продукт с указанным уникальным кодом для заданной партии"""
+
+    return await crud.aggregation(request.batch_id, request.unique_code)
