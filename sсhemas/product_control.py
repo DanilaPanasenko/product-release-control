@@ -116,3 +116,19 @@ class BatchUpdate(BaseModel):
         if v is not None:
             return {"is_closed": v, "closed_at": datetime.now() if v else None}
         return v
+
+
+class BatchFilter(BaseModel):
+    """Схема фильтрации заданий"""
+    is_closed: bool | None = None
+    work_center: str | None = None
+    shift: str | None = None
+    team: str | None = None
+    batch_number: int | None = None
+    batch_date: date | None = None
+    work_center_id: str | None = None
+    limit: int | None = 10
+    offset: int | None = None
+
+    class Config:
+        extra = "forbid"

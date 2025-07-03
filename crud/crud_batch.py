@@ -1,8 +1,10 @@
 from datetime import datetime
-from typing import Optional, Type
+from typing import Optional, Type, List, Dict, Any
+
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
-from sqlalchemy import select, update
+from sqlalchemy import select, update, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.product_control import BatchModel, ProductModel
 from sсhemas.product_control import (
@@ -10,7 +12,7 @@ from sсhemas.product_control import (
     Batch,
     ProductCreate,
     BatchAndProduct,
-    BatchUpdate,
+    BatchUpdate, BatchFilter,
 )
 
 
@@ -91,6 +93,38 @@ class BatchCrud:
         if batch:
             await self.session.commit()
         return batch
+
+    async def get_batches_filter(self, batch_filter: BatchFilter) -> List[Dict[str, Any]]:
+        """Получение сменных заданий по фильтрам"""
+
+        query = select(BatchModel)
+        filters = []
+
+        if batch_filter.is_closed:
+            filters.append(BatchModel.is_closed == batch_filter.is_closed)
+        if batch_filter.work_center:
+            filters.append(BatchModel.work_center == batch_filter.work_center)
+        if batch_filter.shift:
+            filters.append(BatchModel.shift == batch_filter.shift)
+        if batch_filter.team:
+            filters.append(BatchModel.team == batch_filter.team)
+        if batch_filter.batch_number:
+            filters.append(BatchModel.batch_number == batch_filter.batch_number)
+        if batch_filter.batch_date:
+            filters.append(BatchModel.batch_date == batch_filter.batch_date)
+        if batch_filter.work_center_id:
+            filters.append(BatchModel.work_center_id == batch_filter.work_center_id)
+
+        if filters:
+            query = query.where(and_(*filters))
+
+        if batch_filter.limit:
+            query = query.limit(batch_filter.limit)
+        if batch_filter.offset:
+            query = query.offset(batch_filter.offset)
+
+        result = await self.session.execute(query)
+        return jsonable_encoder(result.scalars().all())
 
 
 class ProductCrud:

@@ -1,4 +1,6 @@
-from fastapi import FastAPI, Depends, HTTPException
+from datetime import date
+
+from fastapi import FastAPI, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
@@ -12,7 +14,7 @@ from sсhemas.product_control import (
     ProductCreate,
     ProductResponse,
     BatchAndProduct,
-    BatchUpdate,
+    BatchUpdate, BatchFilter,
 )
 
 app = FastAPI()
@@ -66,6 +68,8 @@ async def update_batch_id(
     update_data: BatchUpdate,
     crud: BatchCrud = Depends(get_batch_creator),
 ):
+    """Эндпоинт для обновления задания"""
+
     update_batch = await crud.update_batch(batch_id, update_data)
     if not update_batch:
         raise HTTPException(
@@ -73,3 +77,34 @@ async def update_batch_id(
             detail=f"Партия с ID: {batch_id} не найдена",
         )
     return update_batch
+
+
+@app.get("/get_batches/", response_model=list[Batch])
+async def get_batches(
+    is_closed: bool | None = Query(None),
+    work_center: str | None = Query(None),
+    shift: str | None = Query(None),
+    team: str | None = Query(None),
+    batch_number: int | None = Query(None),
+    batch_date: date | None = Query(None),
+    work_center_id: str | None = Query(None),
+    limit: int | None = Query(10, ge=1),
+    offset: int | None = Query(0, ge=0),
+    crud: BatchCrud = Depends(get_batch_creator)
+):
+    """Эндпоинт для получения заданий с фильтрацией"""
+
+    filters = BatchFilter(
+        is_closed=is_closed,
+        work_center=work_center,
+        shift=shift,
+        team=team,
+        batch_number=batch_number,
+        batch_date=batch_date,
+        work_center_id=work_center_id,
+        limit=limit,
+        offset=offset
+    )
+
+    batch_filters = await crud.get_batches_filter(filters)
+    return batch_filters
