@@ -20,23 +20,6 @@ from sсhemas.product_control import (
 app = FastAPI()
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Функция для очистки и создания БД, использовать только во время разработки"""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)  # Удаляем старую
-        await conn.run_sync(Base.metadata.create_all)  # Создаем новую
-
-
-@app.get("/db-check")
-async def db_check(db: AsyncSession = Depends(get_db)):
-    try:
-        await db.execute(text("SELECT 1"))
-        return {"status": "Database connection OK"}
-    except Exception as e:
-        raise HTTPException(500, detail=str(e))
-
-
 @app.post("/add_batch/", response_model=Batch)
 async def create_batch(
     batch_data: BatchCreate, crud: BatchCrud = Depends(get_batch_creator)
