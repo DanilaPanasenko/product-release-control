@@ -1,12 +1,10 @@
 from datetime import date
 
 from fastapi import FastAPI, Depends, HTTPException, Query
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
+from core.logger import logger
 from crud.crud_batch import BatchCrud, ProductCrud
-from db.db import engine, Base, get_db
 from dependencies.product_control import get_batch_creator, get_product_creator
 from sсhemas.product_control import (
     BatchCreate,
@@ -14,7 +12,9 @@ from sсhemas.product_control import (
     ProductCreate,
     ProductResponse,
     BatchAndProduct,
-    BatchUpdate, BatchFilter, BatchAggregation,
+    BatchUpdate,
+    BatchFilter,
+    BatchAggregation,
 )
 
 app = FastAPI()
@@ -26,7 +26,17 @@ async def create_batch(
 ) -> Batch:
     """Эндпоинт создания сменного задания"""
 
-    return await crud.create_batch(batch_data)
+    try:
+        logger.info(
+            f"Создание сменного задания с номером:{batch_data.batch_number} и датой:{batch_data.batch_date}"
+        )
+        return await crud.create_batch(batch_data)
+    except Exception as e:
+        logger.error(f"Ошибка создания сменного задания: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка создания задания: {str(e)}",
+        )
 
 
 @app.post("/add_product/", response_model=ProductResponse)
@@ -34,15 +44,29 @@ async def create_product(
     product_data: ProductCreate, crud: ProductCrud = Depends(get_product_creator)
 ) -> ProductResponse:
     """Эндпоинт создания продукта"""
-
-    return await crud.create_product(product_data)
+    try:
+        logger.info(f"Создание продукта{product_data.products}")
+        return await crud.create_product(product_data)
+    except HTTPException as e:
+        logger.error(f"Ошибка создания продукта{str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка создания продукта: {str(e)}",
+        )
 
 
 @app.get("/get_batch/", response_model=BatchAndProduct)
 async def get_batch_id(batch_id: int, crud: BatchCrud = Depends(get_batch_creator)):
     """Эндпоинт для получения сменного задания по id"""
-
-    return await crud.get_batch(batch_id)
+    try:
+        logger.info(f"Получения задания с id:{batch_id}")
+        return await crud.get_batch(batch_id)
+    except HTTPException as e:
+        logger.error(f"Не удалось получить задание{str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка получения задания: {str(e)}",
+        )
 
 
 @app.patch("/update/{batch_id}", response_model=BatchUpdate)
@@ -73,7 +97,7 @@ async def get_batches(
     work_center_id: str | None = Query(None),
     limit: int | None = Query(10, ge=1),
     offset: int | None = Query(0, ge=0),
-    crud: BatchCrud = Depends(get_batch_creator)
+    crud: BatchCrud = Depends(get_batch_creator),
 ):
     """Эндпоинт для получения заданий с фильтрацией"""
 
@@ -86,18 +110,34 @@ async def get_batches(
         batch_date=batch_date,
         work_center_id=work_center_id,
         limit=limit,
-        offset=offset
+        offset=offset,
     )
 
-    batch_filters = await crud.get_batches_filter(filters)
-    return batch_filters
+    try:
+        logger.info(f"Задаем фильтр:{filters}")
+        batch_filters = await crud.get_batches_filter(filters)
+        logger.info(f"Получаем задания по фильтрам:{batch_filters}")
+        return batch_filters
+    except HTTPException as e:
+        logger.error(f"Ошибка получения списка заданий:{str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Партия с параметрами: {filters} не найдена",
+        )
 
 
 @app.post("/aggregate_product/", status_code=status.HTTP_200_OK)
 async def aggregate_product(
-    request: BatchAggregation,
-    crud: ProductCrud = Depends(get_product_creator)
+    request: BatchAggregation, crud: ProductCrud = Depends(get_product_creator)
 ):
     """Агрегирует продукт с указанным уникальным кодом для заданной партии"""
 
-    return await crud.aggregation(request.batch_id, request.unique_code)
+    try:
+        logger.info(f"Вносим изменения в задание:{request.batch_id}")
+        return await crud.aggregation(request.batch_id, request.unique_code)
+    except HTTPException as e:
+        logger.error(f"Не удалось внести изменения:{str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Партия с номером: {request.batch_id} не найдена",
+        )

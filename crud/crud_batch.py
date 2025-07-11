@@ -14,7 +14,8 @@ from sсhemas.product_control import (
     Batch,
     ProductCreate,
     BatchAndProduct,
-    BatchUpdate, BatchFilter,
+    BatchUpdate,
+    BatchFilter,
 )
 
 
@@ -96,7 +97,9 @@ class BatchCrud:
             await self.session.commit()
         return batch
 
-    async def get_batches_filter(self, batch_filter: BatchFilter) -> List[Dict[str, Any]]:
+    async def get_batches_filter(
+        self, batch_filter: BatchFilter
+    ) -> List[Dict[str, Any]]:
         """Получение сменных заданий по фильтрам"""
 
         query = select(BatchModel)
@@ -177,29 +180,27 @@ class ProductCrud:
         """Агрегация продукта"""
 
         result = await self.session.execute(
-            select(ProductModel)
-            .where(ProductModel.unique_code == unique_code)
+            select(ProductModel).where(ProductModel.unique_code == unique_code)
         )
         product = result.scalar_one_or_none()
 
         if not product:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Product not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
             )
 
         # Проверяем привязку к партии
         if product.batch_id != batch_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Unique code is attached to another batch"
+                detail="Unique code is attached to another batch",
             )
 
         # Проверяем, не был ли уже агрегирован
         if product.is_aggregated:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unique code already used at {product.aggregated_at}"
+                detail=f"Unique code already used at {product.aggregated_at}",
             )
 
         # Обновляем запись
@@ -211,11 +212,10 @@ class ProductCrud:
             return {
                 "unique_code": product.unique_code,
                 "batch_id": product.batch_id,
-                "aggregated_at": product.aggregated_at
+                "aggregated_at": product.aggregated_at,
             }
         except Exception as e:
             await self.session.rollback()
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=str(e)
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
             )

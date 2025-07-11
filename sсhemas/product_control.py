@@ -1,7 +1,6 @@
 from datetime import date, datetime, timezone
 from typing import List
-
-from pydantic import BaseModel, field_validator, Field
+from pydantic import BaseModel, field_validator, Field, ConfigDict
 
 
 class BatchBase(BaseModel):
@@ -29,8 +28,7 @@ class BatchCreate(BatchBase):
             return v.replace(tzinfo=timezone.utc)
         return v
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class Batch(BatchBase):
@@ -48,13 +46,16 @@ class ProductBase(BaseModel):
 
     unique_code: str = Field(
         description="Уникальный код продукта",
-        example="Prd-123-ABC",
+        json_schema_extra={"example": "Prd-123-ABC"},
         min_length=5,
         max_length=20,
     )
-    batch_number: int = Field(description="Номер партии", example=12345, gt=0)
+    batch_number: int = Field(
+        description="Номер партии", json_schema_extra={"example": 12345}, gt=0
+    )
     batch_date: date = Field(
-        description="Дата производства в формате YYYY-MM-DD", example="2025-05-20"
+        description="Дата производства в формате YYYY-MM-DD",
+        json_schema_extra={"example": "2025-05-20"},
     )
 
 
@@ -63,9 +64,15 @@ class ProductCreate(BaseModel):
 
     products: List[ProductBase] = Field(
         description="Список продуктов",
-        example=[
-            {"unique_code": "PRD-001", "batch_number": 123, "batch_date": "2025-05-22"}
-        ],
+        json_schema_extra={
+            "example": [
+                {
+                    "unique_code": "PRD-001",
+                    "batch_number": 123,
+                    "batch_date": "2025-05-22",
+                }
+            ]
+        },
     )
 
 
@@ -83,15 +90,13 @@ class ProductInBatch(BaseModel):
     aggregated_at: datetime | None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BatchAndProduct(Batch):
     products: List[ProductInBatch]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BatchUpdate(BaseModel):
@@ -113,6 +118,7 @@ class BatchUpdate(BaseModel):
     @field_validator("is_closed")
     def set_closed_at(cls, v):
         """Валидация поля is_closed"""
+
         if v is not None:
             return {"is_closed": v, "closed_at": datetime.now() if v else None}
         return v
@@ -120,6 +126,7 @@ class BatchUpdate(BaseModel):
 
 class BatchFilter(BaseModel):
     """Схема фильтрации заданий"""
+
     is_closed: bool | None = None
     work_center: str | None = None
     shift: str | None = None
@@ -130,10 +137,11 @@ class BatchFilter(BaseModel):
     limit: int | None = 10
     offset: int | None = None
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class BatchAggregation(BaseModel):
+    """Схема агрегации"""
+
     batch_id: int
     unique_code: str
