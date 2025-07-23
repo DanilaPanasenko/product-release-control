@@ -1,16 +1,19 @@
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from crud.crud_batch import BatchCrud, ProductCrud
+from application.use_cases import BatchUseCases
 from db.db import get_db
+from infrastructure.repositories import BatchRepository
+from presentation.controllers_batch import BatchController
+from presentation.controllers_product import ProductController
 
 
-async def get_batch_creator(db: AsyncSession = Depends(get_db)) -> BatchCrud:
-    """Зависимость для получения крудов партии"""
+def get_batch_controller(session: AsyncSession = Depends(get_db)) -> BatchController:
+    repo = BatchRepository(session)
+    use_cases = BatchUseCases(repo)
+    return BatchController(use_cases)
 
-    return BatchCrud(db)
 
-
-async def get_product_creator(db: AsyncSession = Depends(get_db)) -> ProductCrud:
-    """Зависимость для получения крудов продукта"""
-
-    return ProductCrud(db)
+def get_product_controller(
+    session: AsyncSession = Depends(get_db),
+) -> ProductController:
+    return ProductController(session)
