@@ -1,0 +1,10 @@
+.env
+venv
+.ruff_cache
+.pytest_cache
+logs
+.idea
+.test.env
+tests
+pytest.ini
+alembic.ini
